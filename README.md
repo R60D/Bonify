@@ -4,3 +4,6 @@
 ## How to install
    - Just like with any other blender plugin. Edit > Prefrences > Add-ons > Install
 
+## How to use
+   - https://youtu.be/ZXwCbSpX4Sg
+   
