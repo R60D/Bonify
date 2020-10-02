@@ -1,10 +1,10 @@
 bl_info = {
-    "name": "Bonify + Clothify",
+    "name": "R60D'S TOOLS",
     "author": "R60D",
-    "version": (2, 5),
-    "blender": (2, 80, 0),
+    "version": (3, 0),
+    "blender": (2, 90, 1),
     "location": "View3D > Object",
-    "description": "Adds a bone to each selected object and splits bones in 127 bunches, also splits the model between these split bones.",
+    "description": "A lot of tools used for getting blender physics simulations into source",
     "warning": "",
     "doc_url": "",
     "category": "Object",
@@ -18,6 +18,7 @@ from bpy.types import (
     Panel,
     PropertyGroup,
 )
+from bpy.props import (IntProperty)
 
 class OBJECT_OT_Bonify(Operator):
     bl_label = "Bonify"
@@ -140,8 +141,12 @@ class OBJECT_OT_Mesh_Splitter(Operator):
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        # Limitation. Anything above Newton.009 is ignored. but 1280 bones is enough I believe.
+        # Limitation. Anything above Newton.009 is ignored. but 1270 bones is enough I believe.
+        
+        # Remove World
+        bpy.ops.rigidbody.world_remove()
 
+        
         x = -1
         for arm in bpy.data.objects:
             if "Newton" in arm.name:
@@ -354,51 +359,50 @@ class OBJECT_OT_Bone_CRemover(Operator):
         if ed != True:
             bpy.ops.object.posemode_toggle()
         return{'FINISHED'}
-class OBJECT_OT_INVALID_REMOVE(Operator):
-    bl_label = "INVALID REMOVER"
-    bl_idname = "object.invalid_remove"
-    bl_description = "Fixes meshes, upon fail remove"
+class OBJECT_OT_MassClamp(Operator):
+    bl_label = "MassClamp"
+    bl_idname = "object.massclamp"
+    bl_description = "Clamps the minimum weight"
     bl_space_type = ("VIEW_3D")
     bl_region_type = 'UI'
     bl_options = {'REGISTER', 'UNDO'}
     
+    #Properites
+    MassClampParameters: bpy.props.IntProperty(
+        name = "Minimum Weight",
+        default = 10,
+        min = 1,
+        max = 1000,
+        description = "Clamps weight to specified number",
+    )
+    
     def execute(self, context):
         Mini = 0
-        if bpy.context.mode == 'EDIT_MESH':
-            bpy.ops.mesh.select_all(action='SELECT')
-        else:
-            bpy.ops.object.select_all(action='SELECT')
-            bpy.ops.object.editmode_toggle()
-        bpy.ops.mesh.fill_holes()
-        bpy.ops.mesh.remove_doubles()
-        bpy.ops.mesh.vert_connect_concave()
-        bpy.ops.mesh.vert_connect_nonplanar()
-        bpy.ops.mesh.delete_loose()
-        bpy.ops.mesh.fill_holes()
-        bpy.ops.mesh.remove_doubles()
-        bpy.ops.mesh.vert_connect_concave()
-        bpy.ops.mesh.vert_connect_nonplanar()
-        bpy.ops.mesh.delete_loose()
-        bpy.ops.object.editmode_toggle()
-        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_VOLUME', center='MEDIAN')
-        bpy.ops.object.select_all(action='DESELECT')
-        for thing in bpy.data.objects:
-            remo = False
-            if thing.type == 'MESH' and thing.visible_get() == True:
-                xdim = thing.dimensions.x
-                ydim = thing.dimensions.y
-                zdim = thing.dimensions.z
-                if xdim < 0.1 or xdim < 0.1 or xdim < 0.1:
-                    thing.select_set(True)
-                    bpy.ops.object.delete(use_global=False)
-                    Mini += 1
-                    remo = True
-                
-                if remo == False and object_print3d_utils.mesh_helpers.bmesh_copy_from_object(thing).calc_volume() < 100:
-                    thing.select_set(True)
-                    bpy.ops.object.delete(use_global=False)
-                    Mini += 1
-        self.report({'INFO'}, "Success! "+"Removed objects:"+str(Mini))
+
+        for object in bpy.data.objects:
+            if object.type == "MESH" and object.rigid_body.mass < self.MassClampParameters:
+                object.rigid_body.mass = self.MassClampParameters
+                Mini += 1
+        self.report({'INFO'}, "Success! Affected "+str(Mini)+" objects")
+        return{'FINISHED'}
+class OBJECT_OT_NormalFix(Operator):
+    bl_label = "NormalFix"
+    bl_idname = "object.normalfix"
+    bl_description = "Fixes VMF2OBJ normals"
+    bl_space_type = ("VIEW_3D")
+    bl_region_type = 'UI'
+    bl_options = {'REGISTER', 'UNDO'}
+     
+    def execute(self, context):
+
+        selection = bpy.context.selected_objects
+
+        for o in selection:
+            try:
+                bpy.context.view_layer.objects.active = o
+                bpy.ops.mesh.customdata_custom_splitnormals_clear()
+            except:
+                self.report("Object has no custom split normals: " + o.name + ", skipping")
         return{'FINISHED'}
     
 def menu_func(self, context):
@@ -406,7 +410,8 @@ def menu_func(self, context):
     self.layout.operator(OBJECT_OT_Bonify_Splitter.bl_idname)
     self.layout.operator(OBJECT_OT_Mesh_Splitter.bl_idname)
     self.layout.operator(OBJECT_OT_Clothify.bl_idname)
-    self.layout.operator(OBJECT_OT_INVALID_REMOVE.bl_idname)
+    self.layout.operator(OBJECT_OT_MassClamp.bl_idname)
+    self.layout.operator(OBJECT_OT_NormalFix.bl_idname)
         
 def menu_func_mesh(self, context):
     self.layout.operator(OBJECT_OT_Clothify_pin.bl_idname)
@@ -426,7 +431,8 @@ def register():
     bpy.utils.register_class(OBJECT_OT_Clothify_pin)
     bpy.utils.register_class(OBJECT_OT_Bone_Unlock)
     bpy.utils.register_class(OBJECT_OT_Bone_CRemover)
-    bpy.utils.register_class(OBJECT_OT_INVALID_REMOVE)
+    bpy.utils.register_class(OBJECT_OT_MassClamp)
+    bpy.utils.register_class(OBJECT_OT_NormalFix)
     bpy.types.VIEW3D_MT_object.append(menu_func)
     bpy.types.VIEW3D_MT_edit_mesh.append(menu_func_mesh)
     bpy.types.VIEW3D_MT_pose.append(menu_func_pose)
@@ -440,7 +446,8 @@ def unregister():
     bpy.utils.unregister_class(OBJECT_OT_Clothify_pin)
     bpy.utils.unregister_class(OBJECT_OT_Bone_Unlock)
     bpy.utils.unregister_class(OBJECT_OT_Bone_CRemover)
-    bpy.utils.unregister_class(OBJECT_OT_INVALID_REMOVE)
+    bpy.utils.unregister_class(OBJECT_OT_MassClamp)
+    bpy.utils.unregister_class(OBJECT_OT_NormalFix)
     bpy.types.VIEW3D_MT_object.remove(menu_func)
     bpy.types.VIEW3D_MT_edit_mesh.remove(menu_func_mesh)
     bpy.types.VIEW3D_MT_pose.remove(menu_func_pose)
